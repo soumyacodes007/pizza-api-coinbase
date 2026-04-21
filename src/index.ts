@@ -5,6 +5,10 @@ import { logger } from 'hono/logger'
 import { paymentMiddleware, x402ResourceServer } from '@x402/hono'
 import { HTTPFacilitatorClient } from '@x402/core/server'
 import { ExactEvmScheme } from '@x402/evm/exact/server'
+import {
+  bazaarResourceServerExtension,
+  declareDiscoveryExtension
+} from '@x402/extensions/bazaar'
 import { z } from 'zod'
 import { BASE_SEPOLIA, env } from './config.js'
 
@@ -23,10 +27,9 @@ const facilitatorClient = new HTTPFacilitatorClient({
   url: env.FACILITATOR_URL
 })
 
-const resourceServer = new x402ResourceServer(facilitatorClient).register(
-  BASE_SEPOLIA,
-  new ExactEvmScheme()
-)
+const resourceServer = new x402ResourceServer(facilitatorClient)
+resourceServer.register(BASE_SEPOLIA, new ExactEvmScheme())
+resourceServer.registerExtension(bazaarResourceServerExtension)
 
 app.use(
   paymentMiddleware(
@@ -44,35 +47,78 @@ app.use(
           'Get a pizza delivery OTP plus rider details for a placed order.',
         mimeType: 'application/json',
         extensions: {
-          bazaar: {
-            discoverable: true,
-            category: 'food',
-            tags: ['pizza', 'delivery', 'otp', 'demo', 'x402'],
-            info: {
-              input: {
-                type: 'http',
-                method: 'POST',
-                bodyType: 'json',
-                body: {
-                  orderId: 'PIZZA-101',
-                  pizza: 'Margherita',
-                  deliveryArea: 'Sector 5',
-                  customerName: 'Soumy'
+          ...declareDiscoveryExtension({
+            input: {
+              orderId: 'PIZZA-101',
+              pizza: 'Margherita',
+              deliveryArea: 'Sector 5',
+              customerName: 'Soumy'
+            },
+            bodyType: 'json',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                orderId: {
+                  type: 'string',
+                  description: 'Merchant order ID'
+                },
+                pizza: {
+                  type: 'string',
+                  description: 'Pizza variant ordered by the customer'
+                },
+                deliveryArea: {
+                  type: 'string',
+                  description: 'Delivery neighborhood or area'
+                },
+                customerName: {
+                  type: 'string',
+                  description: 'Customer display name'
                 }
               },
-              output: {
-                type: 'json',
-                example: {
-                  orderId: 'PIZZA-101',
-                  otp: '482913',
-                  etaMinutes: 18,
-                  riderName: 'Aarav',
-                  riderPhoneMasked: '+91-98XXXX120',
-                  status: 'out_for_delivery'
-                }
+              required: ['orderId', 'pizza', 'deliveryArea']
+            },
+            output: {
+              example: {
+                orderId: 'PIZZA-101',
+                pizza: 'Margherita',
+                deliveryArea: 'Sector 5',
+                customerName: 'Soumy',
+                otp: '482913',
+                etaMinutes: 18,
+                riderName: 'Aarav',
+                riderPhoneMasked: '+91-98XXXX120',
+                status: 'out_for_delivery',
+                generatedAt: '2026-04-22T00:00:00.000Z'
+              },
+              schema: {
+                type: 'object',
+                properties: {
+                  orderId: { type: 'string' },
+                  pizza: { type: 'string' },
+                  deliveryArea: { type: 'string' },
+                  customerName: { type: 'string' },
+                  otp: { type: 'string' },
+                  etaMinutes: { type: 'number' },
+                  riderName: { type: 'string' },
+                  riderPhoneMasked: { type: 'string' },
+                  status: { type: 'string' },
+                  generatedAt: { type: 'string' }
+                },
+                required: [
+                  'orderId',
+                  'pizza',
+                  'deliveryArea',
+                  'customerName',
+                  'otp',
+                  'etaMinutes',
+                  'riderName',
+                  'riderPhoneMasked',
+                  'status',
+                  'generatedAt'
+                ]
               }
             }
-          }
+          })
         }
       }
     },

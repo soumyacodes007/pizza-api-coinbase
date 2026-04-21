@@ -59,6 +59,12 @@ For Base Sepolia testing, keep:
 
 - `FACILITATOR_URL=https://x402.org/facilitator`
 
+If you want this route to appear in the **CDP Bazaar**, switch to the CDP facilitator:
+
+- `FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402`
+
+Then make sure at least one successful payment is settled through that same facilitator. CDP discovery only indexes resources it sees through the CDP facilitator; payments settled through `x402.org/facilitator` do not automatically appear in CDP search.
+
 ## Notes
 
 - This is a demo seller, so the OTP is generated in memory per request.
