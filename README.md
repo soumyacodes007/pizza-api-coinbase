@@ -54,6 +54,7 @@ Set these env vars on your host:
 - `PIZZA_PAY_TO`
 - `PIZZA_PRICE_USD`
 - `FACILITATOR_URL`
+- `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` if using the CDP facilitator
 
 For Base Sepolia testing, keep:
 
@@ -62,8 +63,12 @@ For Base Sepolia testing, keep:
 If you want this route to appear in the **CDP Bazaar**, switch to the CDP facilitator:
 
 - `FACILITATOR_URL=https://api.cdp.coinbase.com/platform/v2/x402`
+- `CDP_API_KEY_ID=...`
+- `CDP_API_KEY_SECRET=...`
 
 Then make sure at least one successful payment is settled through that same facilitator. CDP discovery only indexes resources it sees through the CDP facilitator; payments settled through `x402.org/facilitator` do not automatically appear in CDP search.
+
+When `FACILITATOR_URL` points at CDP, this app generates short-lived Bearer JWTs for the facilitator `supported`, `verify`, and `settle` calls using `@coinbase/cdp-sdk/auth`.
 
 ## Notes
 

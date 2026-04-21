@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { paymentMiddleware, x402ResourceServer } from '@x402/hono'
 import { HTTPFacilitatorClient } from '@x402/core/server'
+import { generateJwt } from '@coinbase/cdp-sdk/auth'
 import { ExactEvmScheme } from '@x402/evm/exact/server'
 import {
   bazaarResourceServerExtension,
@@ -23,8 +24,46 @@ const app = new Hono()
 
 app.use('*', logger())
 
+const facilitatorUrl = new URL(env.FACILITATOR_URL)
+
+const createCdpAuthHeaders = async () => {
+  if (
+    facilitatorUrl.host !== 'api.cdp.coinbase.com' ||
+    !env.CDP_API_KEY_ID ||
+    !env.CDP_API_KEY_SECRET
+  ) {
+    return {
+      supported: {},
+      verify: {},
+      settle: {}
+    }
+  }
+
+  const apiKeyId = env.CDP_API_KEY_ID
+  const apiKeySecret = env.CDP_API_KEY_SECRET
+
+  const buildHeaders = async (path: '/supported' | '/verify' | '/settle') => {
+    const jwt = await generateJwt({
+      apiKeyId,
+      apiKeySecret,
+      requestMethod: path === '/supported' ? 'GET' : 'POST',
+      requestHost: facilitatorUrl.host,
+      requestPath: `${facilitatorUrl.pathname}${path}`
+    })
+
+    return { Authorization: `Bearer ${jwt}` }
+  }
+
+  return {
+    supported: await buildHeaders('/supported'),
+    verify: await buildHeaders('/verify'),
+    settle: await buildHeaders('/settle')
+  }
+}
+
 const facilitatorClient = new HTTPFacilitatorClient({
-  url: env.FACILITATOR_URL
+  url: env.FACILITATOR_URL,
+  createAuthHeaders: createCdpAuthHeaders
 })
 
 const resourceServer = new x402ResourceServer(facilitatorClient)
