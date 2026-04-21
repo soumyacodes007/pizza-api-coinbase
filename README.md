@@ -1,0 +1,65 @@
+# Pizza OTP API
+
+A minimal x402 seller API that charges on Base Sepolia and returns a fake pizza delivery OTP.
+
+This app follows the official x402 seller quickstart pattern:
+
+- Quickstart for Sellers: https://docs.x402.org/getting-started/quickstart-for-sellers
+- HTTP 402 flow: https://docs.x402.org/core-concepts/http-402
+- Facilitator role: https://docs.cdp.coinbase.com/x402/core-concepts/facilitator
+
+## What it does
+
+- `GET /health` returns a simple health check.
+- `POST /api/pizza/otp` is protected by x402.
+- After payment, it returns:
+  - a fake 6-digit OTP
+  - an ETA
+  - a rider name
+  - echoed order details
+
+## Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy `.env.example` to `.env` and fill in `PIZZA_PAY_TO`.
+
+3. Run locally:
+
+```bash
+npm run dev
+```
+
+4. Test the unpaid route:
+
+```bash
+curl -X POST http://localhost:4021/api/pizza/otp \
+  -H "content-type: application/json" \
+  -d '{"orderId":"PIZZA-101","pizza":"Margherita","deliveryArea":"Sector 5"}'
+```
+
+It should return `402 Payment Required`.
+
+## Deploy
+
+This app is a normal Node server, so it fits Railway / Render / Fly / a VM directly.
+
+Set these env vars on your host:
+
+- `PORT`
+- `PIZZA_PAY_TO`
+- `PIZZA_PRICE_USD`
+- `FACILITATOR_URL`
+
+For Base Sepolia testing, keep:
+
+- `FACILITATOR_URL=https://x402.org/facilitator`
+
+## Notes
+
+- This is a demo seller, so the OTP is generated in memory per request.
+- It uses Bazaar metadata so it can be indexed by compatible discovery layers.
