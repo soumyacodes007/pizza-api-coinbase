@@ -4,11 +4,13 @@ import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { paymentMiddleware, x402ResourceServer } from '@x402/hono'
 import { HTTPFacilitatorClient } from '@x402/core/server'
+import { decodePaymentResponseHeader } from '@x402/core/http'
 import { generateJwt } from '@coinbase/cdp-sdk/auth'
 import { ExactEvmScheme } from '@x402/evm/exact/server'
 import {
   bazaarResourceServerExtension,
-  declareDiscoveryExtension
+  declareDiscoveryExtension,
+  validateDiscoveryExtension
 } from '@x402/extensions/bazaar'
 import { z } from 'zod'
 import { BASE_SEPOLIA, env } from './config.js'
@@ -23,6 +25,52 @@ const PizzaOtpRequest = z.object({
 const app = new Hono()
 
 app.use('*', logger())
+
+if (env.PUBLIC_BASE_URL) {
+  app.use('*', async (c, next) => {
+    const incomingUrl = new URL(c.req.url)
+    const rewrittenUrl = new URL(
+      `${incomingUrl.pathname}${incomingUrl.search}`,
+      env.PUBLIC_BASE_URL
+    )
+
+    c.req.raw = new Request(rewrittenUrl, c.req.raw)
+    await next()
+  })
+}
+
+app.use('/api/pizza/otp', async (c, next) => {
+  await next()
+
+  const paymentResponseHeader =
+    c.res.headers.get('PAYMENT-RESPONSE') ??
+    c.res.headers.get('X-PAYMENT-RESPONSE')
+
+  if (!paymentResponseHeader) {
+    return
+  }
+
+  try {
+    const paymentResponse = decodePaymentResponseHeader(paymentResponseHeader)
+    const bazaarExtension = paymentResponse.extensions?.bazaar
+
+    console.log(
+      '[pizza-api bazaar-extension-response]',
+      JSON.stringify(
+        {
+          success: paymentResponse.success,
+          transaction: paymentResponse.transaction,
+          network: paymentResponse.network,
+          bazaar: bazaarExtension ?? null
+        },
+        null,
+        2
+      )
+    )
+  } catch (error) {
+    console.error('[pizza-api bazaar-extension-response] decode failed', error)
+  }
+})
 
 const facilitatorUrl = new URL(env.FACILITATOR_URL)
 
@@ -70,6 +118,92 @@ const resourceServer = new x402ResourceServer(facilitatorClient)
 resourceServer.register(BASE_SEPOLIA, new ExactEvmScheme())
 resourceServer.registerExtension(bazaarResourceServerExtension)
 
+const pizzaDiscoveryExtension = declareDiscoveryExtension({
+  input: {
+    orderId: 'PIZZA-101',
+    pizza: 'Margherita',
+    deliveryArea: 'Sector 5',
+    customerName: 'Soumy'
+  },
+  bodyType: 'json',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      orderId: {
+        type: 'string',
+        description: 'Merchant order ID'
+      },
+      pizza: {
+        type: 'string',
+        description: 'Pizza variant ordered by the customer'
+      },
+      deliveryArea: {
+        type: 'string',
+        description: 'Delivery neighborhood or area'
+      },
+      customerName: {
+        type: 'string',
+        description: 'Customer display name'
+      }
+    },
+    required: ['orderId', 'pizza', 'deliveryArea']
+  },
+  output: {
+    example: {
+      orderId: 'PIZZA-101',
+      pizza: 'Margherita',
+      deliveryArea: 'Sector 5',
+      customerName: 'Soumy',
+      otp: '482913',
+      etaMinutes: 18,
+      riderName: 'Aarav',
+      riderPhoneMasked: '+91-98XXXX120',
+      status: 'out_for_delivery',
+      generatedAt: '2026-04-22T00:00:00.000Z'
+    },
+    schema: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string' },
+        pizza: { type: 'string' },
+        deliveryArea: { type: 'string' },
+        customerName: { type: 'string' },
+        otp: { type: 'string' },
+        etaMinutes: { type: 'number' },
+        riderName: { type: 'string' },
+        riderPhoneMasked: { type: 'string' },
+        status: { type: 'string' },
+        generatedAt: { type: 'string' }
+      },
+      required: [
+        'orderId',
+        'pizza',
+        'deliveryArea',
+        'customerName',
+        'otp',
+        'etaMinutes',
+        'riderName',
+        'riderPhoneMasked',
+        'status',
+        'generatedAt'
+      ]
+    }
+  }
+})
+
+const discoveryValidation = validateDiscoveryExtension(
+  pizzaDiscoveryExtension.bazaar
+)
+
+if (!discoveryValidation.valid) {
+  console.error(
+    '[pizza-api bazaar-schema-invalid]',
+    JSON.stringify(discoveryValidation.errors ?? [])
+  )
+} else {
+  console.log('[pizza-api bazaar-schema-valid]')
+}
+
 app.use(
   paymentMiddleware(
     {
@@ -85,80 +219,7 @@ app.use(
         description:
           'Get a pizza delivery OTP plus rider details for a placed order.',
         mimeType: 'application/json',
-        extensions: {
-          ...declareDiscoveryExtension({
-            input: {
-              orderId: 'PIZZA-101',
-              pizza: 'Margherita',
-              deliveryArea: 'Sector 5',
-              customerName: 'Soumy'
-            },
-            bodyType: 'json',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                orderId: {
-                  type: 'string',
-                  description: 'Merchant order ID'
-                },
-                pizza: {
-                  type: 'string',
-                  description: 'Pizza variant ordered by the customer'
-                },
-                deliveryArea: {
-                  type: 'string',
-                  description: 'Delivery neighborhood or area'
-                },
-                customerName: {
-                  type: 'string',
-                  description: 'Customer display name'
-                }
-              },
-              required: ['orderId', 'pizza', 'deliveryArea']
-            },
-            output: {
-              example: {
-                orderId: 'PIZZA-101',
-                pizza: 'Margherita',
-                deliveryArea: 'Sector 5',
-                customerName: 'Soumy',
-                otp: '482913',
-                etaMinutes: 18,
-                riderName: 'Aarav',
-                riderPhoneMasked: '+91-98XXXX120',
-                status: 'out_for_delivery',
-                generatedAt: '2026-04-22T00:00:00.000Z'
-              },
-              schema: {
-                type: 'object',
-                properties: {
-                  orderId: { type: 'string' },
-                  pizza: { type: 'string' },
-                  deliveryArea: { type: 'string' },
-                  customerName: { type: 'string' },
-                  otp: { type: 'string' },
-                  etaMinutes: { type: 'number' },
-                  riderName: { type: 'string' },
-                  riderPhoneMasked: { type: 'string' },
-                  status: { type: 'string' },
-                  generatedAt: { type: 'string' }
-                },
-                required: [
-                  'orderId',
-                  'pizza',
-                  'deliveryArea',
-                  'customerName',
-                  'otp',
-                  'etaMinutes',
-                  'riderName',
-                  'riderPhoneMasked',
-                  'status',
-                  'generatedAt'
-                ]
-              }
-            }
-          })
-        }
+        extensions: pizzaDiscoveryExtension
       }
     },
     resourceServer

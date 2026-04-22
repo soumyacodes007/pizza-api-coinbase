@@ -4,6 +4,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4021),
   PIZZA_PAY_TO: z.string().min(1, 'PIZZA_PAY_TO is required'),
   PIZZA_PRICE_USD: z.string().default('0.01'),
+  PUBLIC_BASE_URL: z.string().url().optional(),
   FACILITATOR_URL: z.string().url().default('https://x402.org/facilitator'),
   CDP_API_KEY_ID: z.string().optional(),
   CDP_API_KEY_SECRET: z.string().optional()
