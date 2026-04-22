@@ -22,22 +22,13 @@ const PizzaOtpRequest = z.object({
   customerName: z.string().min(1).optional()
 })
 
+const pizzaOtpResourceUrl = env.PUBLIC_BASE_URL
+  ? new URL('/api/pizza/otp', env.PUBLIC_BASE_URL).toString()
+  : undefined
+
 const app = new Hono()
 
 app.use('*', logger())
-
-if (env.PUBLIC_BASE_URL) {
-  app.use('*', async (c, next) => {
-    const incomingUrl = new URL(c.req.url)
-    const rewrittenUrl = new URL(
-      `${incomingUrl.pathname}${incomingUrl.search}`,
-      env.PUBLIC_BASE_URL
-    )
-
-    c.req.raw = new Request(rewrittenUrl, c.req.raw)
-    await next()
-  })
-}
 
 app.use('/api/pizza/otp', async (c, next) => {
   await next()
@@ -216,6 +207,7 @@ app.use(
             payTo: env.PIZZA_PAY_TO
           }
         ],
+        resource: pizzaOtpResourceUrl,
         description:
           'Get a pizza delivery OTP plus rider details for a placed order.',
         mimeType: 'application/json',
