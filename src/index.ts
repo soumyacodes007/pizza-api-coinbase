@@ -9,8 +9,7 @@ import { generateJwt } from '@coinbase/cdp-sdk/auth'
 import { ExactEvmScheme } from '@x402/evm/exact/server'
 import {
   bazaarResourceServerExtension,
-  declareDiscoveryExtension,
-  validateDiscoveryExtension
+  declareDiscoveryExtension
 } from '@x402/extensions/bazaar'
 import { z } from 'zod'
 import { BASE_SEPOLIA, env } from './config.js'
@@ -25,6 +24,20 @@ const PizzaOtpRequest = z.object({
 const pizzaOtpResourceUrl = env.PUBLIC_BASE_URL
   ? new URL('/api/pizza/otp', env.PUBLIC_BASE_URL).toString()
   : undefined
+
+const pizzaUsage = {
+  resource: pizzaOtpResourceUrl ?? '/api/pizza/otp',
+  method: 'POST',
+  contentType: 'application/json',
+  description:
+    'Pay to get a pizza delivery OTP. Do not probe this with GET. Send a JSON body with orderId, pizza, and deliveryArea. customerName is optional.',
+  requestBodyExample: {
+    orderId: 'PIZZA-101',
+    pizza: 'Margherita',
+    deliveryArea: 'Sector 5',
+    customerName: 'Soumy'
+  }
+} as const
 
 const app = new Hono()
 
@@ -182,19 +195,6 @@ const pizzaDiscoveryExtension = declareDiscoveryExtension({
   }
 })
 
-const discoveryValidation = validateDiscoveryExtension(
-  pizzaDiscoveryExtension.bazaar
-)
-
-if (!discoveryValidation.valid) {
-  console.error(
-    '[pizza-api bazaar-schema-invalid]',
-    JSON.stringify(discoveryValidation.errors ?? [])
-  )
-} else {
-  console.log('[pizza-api bazaar-schema-valid]')
-}
-
 app.use(
   paymentMiddleware(
     {
@@ -209,7 +209,7 @@ app.use(
         ],
         resource: pizzaOtpResourceUrl,
         description:
-          'Get a pizza delivery OTP plus rider details for a placed order.',
+          'POST-only JSON endpoint for pizza delivery OTP lookup. Send orderId, pizza, and deliveryArea in the request body; customerName is optional. Do not use GET.',
         mimeType: 'application/json',
         extensions: pizzaDiscoveryExtension
       }
@@ -218,13 +218,37 @@ app.use(
   )
 )
 
+app.get('/', (c) =>
+  c.json({
+    ok: true,
+    service: 'pizza-api',
+    message:
+      'Use POST /api/pizza/otp with application/json. This API is x402-protected.',
+    usage: pizzaUsage,
+    health: '/health'
+  })
+)
+
 app.get('/health', (c) =>
   c.json({
     ok: true,
     service: 'pizza-api',
     network: BASE_SEPOLIA,
-    priceUsd: env.PIZZA_PRICE_USD
+    priceUsd: env.PIZZA_PRICE_USD,
+    usage: pizzaUsage
   })
+)
+
+app.get('/api/pizza/otp', (c) =>
+  c.json(
+    {
+      error: 'Method Not Allowed',
+      message:
+        'Use POST /api/pizza/otp with application/json. This endpoint is not available via GET.',
+      usage: pizzaUsage
+    },
+    405
+  )
 )
 
 app.post('/api/pizza/otp', async (c) => {
